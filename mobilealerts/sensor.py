@@ -38,7 +38,7 @@ MEASUREMENT_TYPES: List[str] = [
     "Wetness",
     "CO2",
     "Air pressure",
-    "Rain",
+    "Accumulated rain",
     "Time span",
     "Alarm",
     "Wind speed",
@@ -301,8 +301,12 @@ class Measurement:
         return self._prior is not None
 
     @property
-    def prior_value(self):
+    def prior_value(self) -> Any:
         return self._prior
+
+    @prior_value.setter
+    def prior_value(self, value: Any) -> None:
+        self._prior = value
 
     def __repr__(self) -> str:
         """Return a formal representation of the measurement."""
@@ -492,6 +496,7 @@ class Measurement:
         if len(value) != 2:
             raise ValueError("Invalid rain level value")
         result: int = int.from_bytes(value, "big")
+        self._prior = self._value
         self._value = result * 0.25
 
     def _set_rain_time_span(
@@ -608,7 +613,7 @@ class Sensor:
         self._parent = parent
 
         self._model, default_name, self._update_period = SENSOR_INFOS.get(
-            self._type_id, (UNKNOWN, UNKNOWN, 0)
+            self._type_id, (UNKNOWN, UNKNOWN, -1)
         )
 
         if name is None:
@@ -616,9 +621,9 @@ class Sensor:
         self._name = name
 
         self._counter = -1
-        self._low_battery = False
-        self._by_event = False
-        self._timestamp = time.time()
+        self._low_battery: Optional[bool] = None
+        self._by_event: Optional[bool] = None
+        self._timestamp: Optional[float] = None
         self._last_update: Optional[bytes] = None
 
         self._name = name
@@ -740,9 +745,13 @@ class Sensor:
         result: str = ("%s (id: %s, battery %s, last %s: %s)") % (
             self._name,
             self._id,
-            "low" if self._low_battery else "good",
+            "unknown"
+            if self._low_battery is None
+            else "low"
+            if self._low_battery
+            else "good",
             "event" if self._by_event else "seen",
-            time.ctime(self._timestamp),
+            time.ctime(self._timestamp) if self._timestamp is not None else "unknown",
         )
         for measurement in self._measurements:
             result += "\n" + str(measurement)
@@ -754,9 +763,15 @@ class Sensor:
 
         result: str = ("id: %s (battery %s, last %s: %s)") % (
             self._id,
-            "low" if self._low_battery else "good",
+            "unknown"
+            if self._low_battery is None
+            else "low"
+            if self._low_battery
+            else "good",
             "event" if self._by_event else "seen",
-            time.strftime("%Y-%m-%d %H:%M:%S", timestamp_struct),
+            time.strftime("%Y-%m-%d %H:%M:%S", timestamp_struct)
+            if self._timestamp is not None
+            else "unknown",
         )
         for measurement in self._measurements:
             result += "\n" + str(measurement)
@@ -912,15 +927,15 @@ class Sensor:
         return self._counter
 
     @property
-    def low_battery(self) -> bool:
+    def low_battery(self) -> Optional[bool]:
         return self._low_battery
 
     @property
-    def by_event(self) -> bool:
+    def by_event(self) -> Optional[bool]:
         return self._by_event
 
     @property
-    def timestamp(self) -> float:
+    def timestamp(self) -> Optional[float]:
         return self._timestamp
 
     @property

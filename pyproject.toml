@@ -6,13 +6,13 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 #name = "python-mobilealerts"
 name = "mobilealerts"
-version = "0.1.9"
+version = "0.1.14.dev0"
 description = "Python classes for MobileAlerts gateway and sensors"
 readme = "README.md"
 authors = ["PlusPlus-ua <alexplas@gmail.com>"]
 license = "MIT"
-repository = "https://github.com/PlusPlus-ua/python-mobilealerts"
-homepage = "https://github.com/PlusPlus-ua/python-mobilealerts"
+repository = "https://github.com/Johnnyyr/python-mobilealerts"
+homepage = "https://github.com/Johnnyyr/python-mobilealerts"
 
 # Keywords description https://python-poetry.org/docs/pyproject/#keywords
 keywords = []  #! Update me

@@ -62,7 +62,9 @@ class Gateway:
         self,
         gateway_id: str,
         local_ip_address: Optional[str] = None,
+        gateway_ip: Optional[str] = None,
     ) -> None:
+        self._destination = self.validate_gateway_ip(gateway_ip)
         self._id: bytes = bytes.fromhex(gateway_id)
         self._local_ip_address: Optional[str] = local_ip_address
         self._handler: Optional[SensorHandler] = None
@@ -88,6 +90,16 @@ class Gateway:
         self._initialized = False
         self._is_online = False
 
+    @staticmethod
+    def validate_gateway_ip(gateway_ip: Optional[str]) -> str:
+        """Return a literal unicast IPv4 destination, or broadcast by default."""
+        if gateway_ip is None:
+            return BROADCAST_ADDR
+        address = IPv4Address(gateway_ip)
+        if address.is_multicast or address.is_unspecified or int(address) == 0xFFFFFFFF:
+            raise ValueError("Gateway address must be a unicast IPv4 address")
+        return str(address)
+
     async def init(
         self,
         config: Optional[bytes] = None,
@@ -112,8 +124,8 @@ class Gateway:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        # asyncio.wait_for owns receive timeouts; socket timeouts make it blocking.
         sock.setblocking(False)
-        sock.settimeout(timeout)
         if local_ip_address:
             sock.bind((local_ip_address, 0))
         else:
@@ -134,7 +146,7 @@ class Gateway:
 
         sock = self.prepare_socket(timeout, self._local_ip_address)
         try:
-            sock.sendto(packet, (BROADCAST_ADDR, PORT))
+            sock.sendto(packet, (self._destination, PORT))
             if wait_for_result:
                 loop = asyncio.get_event_loop()
                 config = await asyncio.wait_for(loop.sock_recv(sock, 256), timeout)
@@ -281,7 +293,7 @@ class Gateway:
 
         sock = Gateway.prepare_socket(1, self._local_ip_address)
         try:
-            sock.sendto(packet, (BROADCAST_ADDR, PORT))
+            sock.sendto(packet, (self._destination, PORT))
         finally:
             sock.close()
 
@@ -330,8 +342,10 @@ class Gateway:
     async def discover(
         local_ip_address: Optional[str] = None,
         timeout: int = 2,
+        gateway_ip: Optional[str] = None,
     ) -> List["Gateway"]:
         """Broadcasts discover packet and yeld gateway objects created from resposes."""
+        destination = Gateway.validate_gateway_ip(gateway_ip)
         result = []
         discovered = []
         loop = asyncio.get_event_loop()
@@ -340,7 +354,7 @@ class Gateway:
         packet = Gateway.prepare_command(DISCOVER_GATEWAYS, bytearray(6))
 
         try:
-            sock.sendto(packet, (BROADCAST_ADDR, PORT))
+            sock.sendto(packet, (destination, PORT))
             _LOGGER.debug("Gateways discovering packet sent")
             start_time = time.time()
             while True:
@@ -358,7 +372,9 @@ class Gateway:
                         continue
                     discovered.append(gateway_id)
 
-                    gateway = Gateway(gateway_id.hex().upper(), local_ip_address)
+                    gateway = Gateway(
+                        gateway_id.hex().upper(), local_ip_address, gateway_ip
+                    )
                     await gateway.init(config)
                     result.append(gateway)
                 if (time.time() - start_time) > timeout:
